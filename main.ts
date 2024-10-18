@@ -1,4 +1,8 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder } from 'obsidian';
+import * as fs from 'fs';
+import * as path from 'path';
+import MarkdownIt from 'markdown-it';
+
 
 // Remember to rename these classes and interfaces!
 
@@ -17,8 +21,9 @@ export default class MyPlugin extends Plugin {
 		await this.loadSettings();
 
 		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
+		const ribbonIconEl = this.addRibbonIcon('table', 'Sample Plugin', (evt: MouseEvent) => {
 			// Called when the user clicks the icon.
+			this.readFiles()
 			new Notice('This is a notice!');
 		});
 		// Perform additional things with the ribbon
@@ -71,15 +76,7 @@ export default class MyPlugin extends Plugin {
 		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
 		// Using this function will automatically remove the event listener when this plugin is disabled.
 		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			const activeFile = this.app.workspace.getActiveFile();
-			if (activeFile) {
-				console.log("Currently open file:", activeFile);
-				this.app.vault.read(activeFile).then(fileContents => {
-					console.log("File Contents:", fileContents);
-				});
-			} else {
-				console.log("No file is currently open.");
-			}
+			
 		});
 
 		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
@@ -96,6 +93,97 @@ export default class MyPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	async readFiles(){
+
+
+		this.readNestedFiles(this.app.vault.getFolderByPath('diary/2024') as TFolder);
+		// this.handleFile(this.app.vault.getFileByPath('diary/2024/17.md') as TFile);
+	}
+	readNestedFiles(folder: TFolder) {
+		// Loop through the folder's children
+		for (const child of folder.children) {
+			if (child instanceof TFile) {
+				// Handle file if it's a TFile instance
+				this.handleFile(child);
+			} else if (child instanceof TFolder) {
+				// Recursively read files in subfolders
+				this.readNestedFiles(child);
+			}
+		}
+	}
+	async handleFile(file: TFile) {
+		// if (file.name != '17.md') {
+		// 	return null
+		// }
+		var content
+		// Read file content using the Vault API
+		await this.app.vault.read(file).then((c) => { content = c })
+			.catch((err) => { console.error(`Error reading file ${file.path}:`, err);});
+		// console.log(`File: ${file.path}`);
+		const md = new MarkdownIt();
+		const tokens = md.parse(content, {});
+		let result = [], tag = '', domain = '', project = '', headers = [], rows = [], tdx = 0, tdy = 0, tableMode = undefined, target = undefined, act = undefined, sub = undefined
+
+		for (const token of tokens){
+			if (token.type == "inline") {
+				if (tag == 'h1') domain = token.content
+				else if (tag == 'h2') project = token.content
+				else if (tag == 'th'){
+					if (tableMode == undefined) tableMode = (token.content == ''? 'table': 'column')
+					headers.push(token.content)
+				}
+				else if (tag == 'td'){
+					if (tdx == 0) rows.push(token.content)
+					if (tableMode == 'column'){
+						if(tdx % 2 == 0){
+							if(token.content != '')
+								act = token.content
+						} else {
+							if(token.content != '')
+								result.push({file: file.name, domain, project, sub: headers[tdx-1], act, content: token.content})
+							target = undefined
+						}
+					} else if (tableMode == 'table'){
+						if(tdx && token.content != ''){
+							result.push({file: file.name, domain, project, sub: rows[tdy], act: headers[tdx], content: token.content})
+						}
+					}
+					tdx ++
+					if (tdx == headers.length){
+						tdx = 0
+						tdy = 0
+					}
+				} 
+			} else if (token.type == "table_open"){
+			} else if (token.type == "table_close"){
+				headers = []
+				rows = []
+				tdx = 0
+				tdy = 0
+				tableMode = undefined
+			}
+			tag = token.tag
+		}
+		// console.log(`File: ${file.path}\nContent:\n${content}`);
+		
+		if (result.length) {
+			console.log(result);
+			
+		}
+		// console.log({tokens, result})
+	}
+	async readCurrent(){
+		const activeFile = this.app.workspace.getActiveFile();
+		if (activeFile) {
+			console.log("Currently open file:", activeFile);
+			this.app.vault.read(activeFile).then(fileContents => {
+				console.log("File Contents:", fileContents);
+			});
+		} else {
+			console.log("No file is currently open.");
+		}
 	}
 }
 
