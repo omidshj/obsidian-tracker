@@ -16,14 +16,17 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
-
+	activities: any[]
 	async onload() {
 		await this.loadSettings();
-
 		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('table', 'Sample Plugin', (evt: MouseEvent) => {
+		const ribbonIconEl = this.addRibbonIcon('table', 'Sample Plugin', async (evt: MouseEvent) => {
 			// Called when the user clicks the icon.
-			this.readFiles()
+			this.activities = []
+			await this.readFiles()
+			await this.write()
+			
+			
 			new Notice('This is a notice!');
 		});
 		// Perform additional things with the ribbon
@@ -98,18 +101,18 @@ export default class MyPlugin extends Plugin {
 	async readFiles(){
 
 
-		this.readNestedFiles(this.app.vault.getFolderByPath('diary/2024') as TFolder);
+		await this.readNestedFiles(this.app.vault.getFolderByPath('diary/2024') as TFolder);
 		// this.handleFile(this.app.vault.getFileByPath('diary/2024/17.md') as TFile);
 	}
-	readNestedFiles(folder: TFolder) {
+	async readNestedFiles(folder: TFolder) {
 		// Loop through the folder's children
 		for (const child of folder.children) {
 			if (child instanceof TFile) {
 				// Handle file if it's a TFile instance
-				this.handleFile(child);
+				await this.handleFile(child);
 			} else if (child instanceof TFolder) {
 				// Recursively read files in subfolders
-				this.readNestedFiles(child);
+				await this.readNestedFiles(child);
 			}
 		}
 	}
@@ -124,7 +127,7 @@ export default class MyPlugin extends Plugin {
 		// console.log(`File: ${file.path}`);
 		const md = new MarkdownIt();
 		const tokens = md.parse(content, {});
-		let result = [], tag = '', domain = '', project = '', headers = [], rows = [], tdx = 0, tdy = 0, tableMode = undefined, target = undefined, act = undefined, sub = undefined
+		let tag = '', domain = '', project = '', headers = [], rows = [], tdx = 0, tdy = 0, tableMode = undefined, target = undefined, act = undefined, sub = undefined
 
 		for (const token of tokens){
 			if (token.type == "inline") {
@@ -142,12 +145,12 @@ export default class MyPlugin extends Plugin {
 								act = token.content
 						} else {
 							if(token.content != '')
-								result.push({file: file.name, domain, project, sub: headers[tdx-1], act, content: token.content})
+								this.activities.push({file: file.name, domain, project, sub: headers[tdx-1], act, content: token.content})
 							target = undefined
 						}
 					} else if (tableMode == 'table'){
 						if(tdx && token.content != ''){
-							result.push({file: file.name, domain, project, sub: rows[tdy], act: headers[tdx], content: token.content})
+							this.activities.push({file: file.name, domain, project, sub: rows[tdy], act: headers[tdx], content: token.content})
 						}
 					}
 					tdx ++
@@ -167,12 +170,36 @@ export default class MyPlugin extends Plugin {
 			tag = token.tag
 		}
 		// console.log(`File: ${file.path}\nContent:\n${content}`);
-		
-		if (result.length) {
-			console.log(result);
-			
-		}
+
 		// console.log({tokens, result})
+	}
+	async write(){
+		
+		try {
+            // Check if the file exists
+			const { vault } = this.app, filePath = 'stats.md'
+			var content = '# hiii there\r\n'
+            const existingFile = vault.getAbstractFileByPath(filePath);
+
+			
+			console.log(this.activities.length);
+			
+			for(const act of this.activities){
+				content += `- **domain**: ${act.domain} project: ${act.project} \r\n`
+			}
+            if (existingFile) {
+                // If the file exists, modify it (replace content)
+                await vault.modify(existingFile as any, content);
+                new Notice(`File "${filePath}" updated successfully.`);
+            } else {
+                // If the file doesn't exist, create a new one
+                await vault.create(filePath, content);
+                new Notice(`File "${filePath}" created successfully.`);
+            }
+        } catch (error) {
+            console.error("Error writing to file:", error);
+            new Notice("Failed to write to file.");
+        }
 	}
 	async readCurrent(){
 		const activeFile = this.app.workspace.getActiveFile();
