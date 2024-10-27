@@ -101,7 +101,7 @@ export default class MyPlugin extends Plugin {
 	async readFiles(){
 
 
-		await this.readNestedFiles(this.app.vault.getFolderByPath('diary/2024') as TFolder);
+		await this.readNestedFiles(this.app.vault.getFolderByPath('diary/log') as TFolder);
 		// this.handleFile(this.app.vault.getFileByPath('diary/2024/17.md') as TFile);
 	}
 	async readNestedFiles(folder: TFolder) {
@@ -179,13 +179,16 @@ export default class MyPlugin extends Plugin {
             // Check if the file exists
 			const { vault } = this.app, filePath = 'stats.md'
 			var content = '# hiii there\r\n'
+			content += '|file|domain|project|act|content|\r\n'
+			content += '|---|---|---|---|---|\r\n'
             const existingFile = vault.getAbstractFileByPath(filePath);
 
 			
 			console.log(this.activities.length);
 			
 			for(const act of this.activities){
-				content += `- **domain**: ${act.domain} project: ${act.project} \r\n`
+				content += `|${act.file}|${act.domain}|${act.project}|${act.act}|${act.content}|\r\n`
+				// content += `- **domain**: ${act.domain} project: ${act.project} \r\n`
 			}
             if (existingFile) {
                 // If the file exists, modify it (replace content)
